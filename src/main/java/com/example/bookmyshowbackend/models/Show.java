@@ -16,7 +16,7 @@ public class Show extends BaseModel{
     @ManyToOne
     private Movie movie;
     private Date startTime;
-    private int duration;
+    private Date endTime;
     @ManyToOne
     private Screen screen;
     @OneToMany

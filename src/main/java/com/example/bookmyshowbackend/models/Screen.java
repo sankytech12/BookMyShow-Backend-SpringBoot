@@ -13,8 +13,6 @@ public class Screen extends BaseModel{
     private String name;
     @OneToMany
     private List<Seat> seats;
-    @ManyToOne
-    private Theatre theatre;
     @Enumerated(value = EnumType.ORDINAL)
     @ElementCollection
     private List<ScreenFeature> screenFeatures;

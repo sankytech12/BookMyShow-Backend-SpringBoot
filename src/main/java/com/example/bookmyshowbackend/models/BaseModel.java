@@ -18,7 +18,9 @@ public class BaseModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
     @CreatedDate
+    @Temporal(TemporalType.TIMESTAMP)
     private Date createdAt;
     @LastModifiedDate
+    @Temporal(TemporalType.TIMESTAMP)
     private Date lastUpdatedAt;
 }

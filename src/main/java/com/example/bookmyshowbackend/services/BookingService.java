@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -21,16 +22,18 @@ public class BookingService {
     private BookingRepository bookingRepository;
     private ShowRepository showRepository;
     private ShowSeatRepository showSeatRepository;
+    private PriceCalculatorService priceCalculatorService;
 
     @Autowired
     public BookingService(UserRepository userRepository,
                           BookingRepository bookingRepository,
                           ShowRepository showRepository,
-                          ShowSeatRepository showSeatRepository) {
+                          ShowSeatRepository showSeatRepository,PriceCalculatorService priceCalculatorService) {
         this.userRepository = userRepository;
         this.bookingRepository = bookingRepository;
         this.showRepository = showRepository;
         this.showSeatRepository = showSeatRepository;
+        this.priceCalculatorService = priceCalculatorService;
     }
 
 
@@ -55,39 +58,27 @@ public class BookingService {
         List<ShowSeat> showSeats=showSeatRepository.findAllById(showSeatIds);
         //4. check if all the seats are available
         for(ShowSeat showSeat:showSeats){
-            if(!showSeat.getShowSeatStatus().equals(ShowSeatStatus.AVAILABLE)){
+            if (!(showSeat.getShowSeatStatus().equals(ShowSeatStatus.AVAILABLE) ||
+                    (showSeat.getShowSeatStatus().equals(ShowSeatStatus.BLOCKED) &&
+                            Duration.between(showSeat.getBlockedAt().toInstant(), new Date().toInstant()).toMinutes() > 15
+                    ))){
                 //6. If no then return a error message
                 throw new RuntimeException("Show seat status is not AVAILABLE");
             }
         }
         //5. If yes then -> Block the seats, save the seats in the db,
+        List<ShowSeat> bookedShowSeats = new ArrayList<>();
         for(ShowSeat showSeat:showSeats){
             showSeat.setShowSeatStatus(ShowSeatStatus.BLOCKED);
             showSeat.setBlockedAt(new Date());
+            bookedShowSeats.add(showSeat);
         }
         showSeatRepository.saveAll(showSeats);
         // ------- STOP TRANSACTION ------
 
 
         // Calculate the price
-        int totalAmount = 0;
-        for (ShowSeat showSeat : showSeats) {
-            SeatType seatType = showSeat.getSeat().getSeatType();  // Get the seat type of the current seat
-
-            // Find the corresponding ShowSeatType in the show
-            Optional<ShowSeatType> showSeatTypeOptional = show.getShowSeatTypes().stream()
-                    .filter(showSeatType -> showSeatType.getSeatType().equals(seatType))
-                    .findFirst();
-
-            if (showSeatTypeOptional.isPresent()) {
-                int price = showSeatTypeOptional.get().getPrice();  // Get the price for the seat type
-                totalAmount += price;  // Add the price to the total amount
-            } else {
-                throw new RuntimeException("Price not found for seat type: " + seatType.getValue());
-            }
-        }
-        // Future Score: To create a separate PriceCalculatorService
-
+        int totalAmount = priceCalculatorService.calculatePrice(show, showSeats);
 
         // Create booking obj and save and return it
         Booking booking = new Booking();
@@ -96,7 +87,7 @@ public class BookingService {
         booking.setBookingStatus(BookingStatus.PENDING);
         booking.setAmount(totalAmount);
         booking.setPayments(new ArrayList<>());
-        booking.setShowSeats(showSeats);
+        booking.setShowSeats(bookedShowSeats);
 
         return bookingRepository.save(booking);
     }
